@@ -4,48 +4,94 @@ import DotGrid from './components/DotGrid';
 import ChromaGrid from './components/ChromaGrid';
 import './index.css';
 
-const SOCKET_URL = 'https://live-bidding-platform-9k8b.onrender.com';
+// Environment-aware socket connection: localhost for dev, Render for production
+const SOCKET_URL = window.location.hostname === "localhost"
+  ? "http://localhost:3001"
+  : "https://live-bidding-platform-9k8b.onrender.com";
 
 function App() {
   const [auctions, setAuctions] = useState([]);
   const [bidAmounts, setBidAmounts] = useState({});
   const [bidderName, setBidderName] = useState('');
-  const [notification, setNotification] = useState(null);
+  const [notification, setNotification] = useState({ message: '', type: '' });
   const socketRef = useRef(null);
 
   useEffect(() => {
-    // Connect to Socket.io server
-    socketRef.current = io(SOCKET_URL);
+    // AGGRESSIVE CLEAR: Force disconnect any existing connection first
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
 
-    // Listen for initial state
-    socketRef.current.on('initialState', (data) => {
-      setAuctions(data.items);
-      const initialBids = {};
-      data.items.forEach(item => {
-        initialBids[item.id] = item.currentBid + 10;
+    // Clear ALL state immediately before connecting
+    setAuctions([]);
+    setBidAmounts({});
+    setBidderName('');
+
+    // Wait a moment then connect fresh
+    const connectTimer = setTimeout(() => {
+      // Connect to Socket.io server with cache busting
+      socketRef.current = io(SOCKET_URL, {
+        reconnection: true,
+        reconnectionDelay: 500,
+        reconnectionAttempts: 10,
+        forceNew: true, // Force new connection, don't reuse
+        transports: ['websocket'], // Skip polling, use websocket only
       });
-      setBidAmounts(initialBids);
-    });
 
-    // Listen for bid updates
-    socketRef.current.on('bidUpdate', (updatedItem) => {
-      setAuctions(prev => prev.map(item =>
-        item.id === updatedItem.id ? updatedItem : item
-      ));
-      showNotification(`New bid on ${updatedItem.name}: $${updatedItem.currentBid}`, 'success');
-    });
+      // Handle connection/reconnection - clear ALL state on connect
+      socketRef.current.on('connect', () => {
+        console.log('🔌 Connected to server - clearing old state');
+        // Force clear all state on every connection
+        setAuctions([]);
+        setBidAmounts({});
+      });
 
-    // Listen for bid success
-    socketRef.current.on('bidSuccess', (item) => {
-      showNotification(`Your bid of $${item.currentBid} on ${item.name} was successful!`, 'success');
-    });
+      // Listen for initial state
+      socketRef.current.on('initialState', (data) => {
+        console.log('📦 Received fresh data from server:', data.items);
+        setAuctions(data.items);
+        // Reset bid amounts to prevent persistence across server restarts
+        const initialBids = {};
+        data.items.forEach(item => {
+          initialBids[item.id] = item.currentBid + 10;
+        });
+        setBidAmounts(initialBids);
+        console.log('✅ State updated with fresh data');
+      });
 
-    // Listen for bid errors
-    socketRef.current.on('bidError', (data) => {
-      showNotification(data.error, 'error');
-    });
+      // Listen for bid updates
+      socketRef.current.on('bidUpdate', (updatedItem) => {
+        console.log('📢 Bid update received:', updatedItem);
+        setAuctions(prev => prev.map(item =>
+          item.id === updatedItem.id ? updatedItem : item
+        ));
+        // Update the bid amount input to reflect new minimum (currentBid + 10)
+        setBidAmounts(prev => ({
+          ...prev,
+          [updatedItem.id]: updatedItem.currentBid + 10
+        }));
+        showNotification(`New bid on ${updatedItem.name}: $${updatedItem.currentBid}`, 'success');
+      });
+
+      // Listen for bid success
+      socketRef.current.on('bidSuccess', (item) => {
+        showNotification(`Your bid of $${item.currentBid} on ${item.title} was successful!`, 'success');
+      });
+
+      // Listen for bid errors
+      socketRef.current.on('bidError', (data) => {
+        showNotification(data.error, 'error');
+      });
+
+      // Handle disconnection
+      socketRef.current.on('disconnect', () => {
+        console.log('❌ Disconnected from server');
+      });
+    }, 100);
 
     return () => {
+      clearTimeout(connectTimer);
       socketRef.current?.disconnect();
     };
   }, []);

@@ -1,6 +1,140 @@
 import { useRef, useEffect, useState } from 'react';
 import { gsap } from 'gsap';
 
+// Individual Auction Card Component with its own timer state
+const AuctionCard = ({ item, index, placeBid, bidAmounts, handleBidChange, bidderName, currentUser, onCardRef, isFlashing }) => {
+    // Initialize targetTime ONLY ONCE using useState lazy initialization
+    const [targetTime] = useState(() => {
+        return item.auctionEndsAt ? item.auctionEndsAt : (Date.now() + (15 * 60 * 1000));
+    });
+    const [timeLeft, setTimeLeft] = useState(targetTime - Date.now());
+    const cardRef = useRef(null);
+
+    // Debug: Log timestamp data
+    useEffect(() => {
+        console.log("Item Time:", item.auctionEndsAt, "Current Time:", Date.now(), "Item Title:", item.title);
+    }, [item.auctionEndsAt, item.title]);
+
+    // Timer logic - updates every second
+    useEffect(() => {
+        const timer = setInterval(() => {
+            const newTimeLeft = targetTime - Date.now();
+            setTimeLeft(newTimeLeft);
+            // Optional: Stop timer if 0
+            if (newTimeLeft <= 0) clearInterval(timer);
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [targetTime]);
+
+    // Format time display
+    const formatTime = (ms) => {
+        if (ms <= 0) return "CLOSED";
+        const hours = Math.floor(ms / (1000 * 60 * 60));
+        const minutes = Math.floor((ms / 1000 / 60) % 60);
+        const seconds = Math.floor((ms / 1000) % 60);
+        return `${hours}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+    };
+
+    const isWinning = item.highestBidder === currentUser;
+    const isOutbid = item.userHasBid && !isWinning;
+    const isClosed = timeLeft <= 0;
+
+    // Store ref for parent component
+    useEffect(() => {
+        if (cardRef.current) {
+            onCardRef(index, cardRef.current);
+        }
+    }, [index, onCardRef]);
+
+    return (
+        <div
+            ref={cardRef}
+            className={`chroma-card relative p-6 rounded-xl overflow-hidden ${isFlashing ? 'flash-green' : ''}`}
+            style={{
+                '--mouse-x': '0px',
+                '--mouse-y': '0px',
+                '--spotlight-opacity': 0
+            }}
+        >
+            <div className="spotlight-overlay" />
+
+            <div className="relative z-10">
+                <div className="absolute top-0 right-0 flex gap-2">
+                    {isWinning && (
+                        <div className="badge-winning px-3 py-1 rounded-full text-xs font-bold">
+                            WINNING 👑
+                        </div>
+                    )}
+                    {isOutbid && (
+                        <div className="badge-outbid px-3 py-1 rounded-full text-xs font-bold">
+                            OUTBID ⚠️
+                        </div>
+                    )}
+                </div>
+
+                <div className="mb-4">
+                    <h3 className="text-2xl font-bold text-white mb-2">{item.title}</h3>
+                    <div className="flex items-baseline gap-2">
+                        <span className="text-gray-400 text-sm">Current Bid:</span>
+                        <span className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-violet-500 bg-clip-text text-transparent">
+                            ${item.currentBid}
+                        </span>
+                    </div>
+
+                    <div className="mt-3 flex items-center gap-2">
+                        <span className="text-gray-400 text-sm">Time Remaining:</span>
+                        {isClosed ? (
+                            <div className="badge-closed px-3 py-1 rounded-full text-xs font-bold">
+                                CLOSED 🔒
+                            </div>
+                        ) : (
+                            <span className="text-xl font-bold text-cyan-400 font-mono">
+                                {formatTime(timeLeft)}
+                            </span>
+                        )}
+                    </div>
+
+                    {item.highestBidder && (
+                        <p className="text-sm text-gray-400 mt-2">
+                            Highest Bidder:{' '}
+                            <span className="text-violet-400 font-semibold">{item.highestBidder}</span>
+                        </p>
+                    )}
+                </div>
+
+                <div className="space-y-3">
+                    <div>
+                        <label className="block text-sm font-medium mb-2 text-gray-300">
+                            Your Bid Amount
+                        </label>
+                        <input
+                            type="number"
+                            value={bidAmounts[item.id] || item.currentBid + 10}
+                            onChange={(e) => handleBidChange(item.id, e.target.value)}
+                            placeholder={`Minimum: $${item.currentBid + 1}`}
+                            className="w-full"
+                            min={item.currentBid + 1}
+                            step="10"
+                            disabled={isClosed}
+                        />
+                    </div>
+
+                    <button
+                        onClick={() => placeBid(item.id)}
+                        disabled={!bidderName.trim() || isClosed}
+                        className={`w-full py-3 rounded-lg font-semibold text-white transition-all ${bidderName.trim() && !isClosed
+                            ? 'bg-gradient-to-r from-cyan-500 to-violet-600 hover:from-cyan-600 hover:to-violet-700 shadow-lg shadow-violet-500/50'
+                            : 'bg-gray-600 cursor-not-allowed opacity-50'
+                            }`}
+                    >
+                        {isClosed ? 'Auction Closed' : 'Place Bid'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const ChromaGrid = ({ auctionItems, placeBid, bidAmounts, handleBidChange, bidderName, currentUser }) => {
     const gridRef = useRef(null);
     const cardsRef = useRef([]);
@@ -10,20 +144,29 @@ const ChromaGrid = ({ auctionItems, placeBid, bidAmounts, handleBidChange, bidde
     /**
      * Visual Feedback: Trigger green flash animation when bid amount updates.
      * Tracks previous bid values to detect real-time changes from Socket.io.
+     * CRITICAL: Only depends on item.currentBid, NOT on full auctionItems to prevent timer interference.
      */
     useEffect(() => {
         auctionItems.forEach((item) => {
-            const prevBid = previousBids.current[item.id];
-            if (prevBid !== undefined && prevBid !== item.currentBid) {
+            // Initialize previous bid tracking
+            if (previousBids.current[item.id] === undefined) {
+                previousBids.current[item.id] = item.currentBid;
+                return;
+            }
+
+            // Only trigger flash if bid actually changed
+            if (item.currentBid > previousBids.current[item.id]) {
                 setFlashingCards(prev => ({ ...prev, [item.id]: true }));
                 setTimeout(() => {
                     setFlashingCards(prev => ({ ...prev, [item.id]: false }));
                 }, 600);
             }
+
             previousBids.current[item.id] = item.currentBid;
         });
-    }, [auctionItems]);
+    }, [auctionItems.map(item => item.currentBid).join(',')]);
 
+    // Spotlight effect handlers
     useEffect(() => {
         const cards = cardsRef.current;
 
@@ -81,91 +224,29 @@ const ChromaGrid = ({ auctionItems, placeBid, bidAmounts, handleBidChange, bidde
         };
     }, [auctionItems]);
 
+    const handleCardRef = (index, ref) => {
+        cardsRef.current[index] = ref;
+    };
+
     return (
         <div
             ref={gridRef}
             className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6"
         >
-            {auctionItems.map((item, index) => {
-                const isWinning = item.highestBidder === currentUser;
-                const isOutbid = item.userHasBid && !isWinning;
-                const isFlashing = flashingCards[item.id];
-
-                return (
-                    <div
-                        key={item.id}
-                        ref={(el) => (cardsRef.current[index] = el)}
-                        className={`chroma-card relative p-6 rounded-xl overflow-hidden ${isFlashing ? 'flash-green' : ''
-                            }`}
-                        style={{
-                            '--mouse-x': '0px',
-                            '--mouse-y': '0px',
-                            '--spotlight-opacity': 0
-                        }}
-                    >
-                        <div className="spotlight-overlay" />
-
-                        <div className="relative z-10">
-                            <div className="absolute top-0 right-0 flex gap-2">
-                                {isWinning && (
-                                    <div className="badge-winning px-3 py-1 rounded-full text-xs font-bold">
-                                        WINNING 👑
-                                    </div>
-                                )}
-                                {isOutbid && (
-                                    <div className="badge-outbid px-3 py-1 rounded-full text-xs font-bold">
-                                        OUTBID ⚠️
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="mb-4">
-                                <h3 className="text-2xl font-bold text-white mb-2">{item.name}</h3>
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-gray-400 text-sm">Current Bid:</span>
-                                    <span className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-violet-500 bg-clip-text text-transparent">
-                                        ${item.currentBid}
-                                    </span>
-                                </div>
-                                {item.highestBidder && (
-                                    <p className="text-sm text-gray-400 mt-2">
-                                        Highest Bidder:{' '}
-                                        <span className="text-violet-400 font-semibold">{item.highestBidder}</span>
-                                    </p>
-                                )}
-                            </div>
-
-                            <div className="space-y-3">
-                                <div>
-                                    <label className="block text-sm font-medium mb-2 text-gray-300">
-                                        Your Bid Amount
-                                    </label>
-                                    <input
-                                        type="number"
-                                        value={bidAmounts[item.id] || item.currentBid + 10}
-                                        onChange={(e) => handleBidChange(item.id, e.target.value)}
-                                        placeholder={`Minimum: $${item.currentBid + 1}`}
-                                        className="w-full"
-                                        min={item.currentBid + 1}
-                                        step="10"
-                                    />
-                                </div>
-
-                                <button
-                                    onClick={() => placeBid(item.id)}
-                                    disabled={!bidderName.trim()}
-                                    className={`w-full py-3 rounded-lg font-semibold text-white transition-all ${bidderName.trim()
-                                        ? 'bg-gradient-to-r from-cyan-500 to-violet-600 hover:from-cyan-600 hover:to-violet-700 shadow-lg shadow-violet-500/50'
-                                        : 'bg-gray-600 cursor-not-allowed opacity-50'
-                                        }`}
-                                >
-                                    Place Bid
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            })}
+            {auctionItems.map((item, index) => (
+                <AuctionCard
+                    key={item.id}
+                    item={item}
+                    index={index}
+                    placeBid={placeBid}
+                    bidAmounts={bidAmounts}
+                    handleBidChange={handleBidChange}
+                    bidderName={bidderName}
+                    currentUser={currentUser}
+                    onCardRef={handleCardRef}
+                    isFlashing={flashingCards[item.id]}
+                />
+            ))}
 
             <style jsx>{`
         .chroma-card {
@@ -212,6 +293,12 @@ const ChromaGrid = ({ auctionItems, placeBid, bidAmounts, handleBidChange, bidde
           background: linear-gradient(135deg, #ef4444, #dc2626);
           color: #fff;
           box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+        }
+
+        .badge-closed {
+          background: linear-gradient(135deg, #6b7280, #4b5563);
+          color: #fff;
+          box-shadow: 0 0 10px rgba(107, 114, 128, 0.5);
         }
 
         @keyframes pulse {

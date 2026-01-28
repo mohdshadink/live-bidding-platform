@@ -16,14 +16,14 @@ app.use(cors());
 app.use(express.json());
 
 // ============================================
-// AUCTION STATE
+// AUCTION STATE - HARD RESET TO DEFAULT
 // ============================================
-// In-memory storage for live auction items
+// NO FILE SYSTEM PERSISTENCE - ALWAYS STARTS FRESH
 let auctionItems = [
-  { id: 1, name: 'Vintage Watch', currentBid: 100, highestBidder: null },
-  { id: 2, name: 'Rare Painting', currentBid: 500, highestBidder: null },
-  { id: 3, name: 'Antique Vase', currentBid: 250, highestBidder: null },
-  { id: 4, name: 'Classic Car Model', currentBid: 1000, highestBidder: null }
+  { id: 1, title: "Vintage Camera", currentBid: 100, highestBidder: null, auctionEndsAt: Date.now() + 900000, image: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32" },
+  { id: 2, title: "Rare Painting", currentBid: 500, highestBidder: null, auctionEndsAt: Date.now() + 900000, image: "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5" },
+  { id: 3, title: "Antique Vase", currentBid: 250, highestBidder: null, auctionEndsAt: Date.now() + 900000, image: "https://images.unsplash.com/photo-1618220179428-22790b461013" },
+  { id: 4, title: "Classic Car Model", currentBid: 1000, highestBidder: null, auctionEndsAt: Date.now() + 900000, image: "https://images.unsplash.com/photo-1605901309584-818e25960b8f" }
 ];
 
 // ============================================
@@ -160,7 +160,15 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3001;
 
 server.listen(PORT, () => {
-  console.log(`\n🚀 Live Bidding Platform Server Running`);
+  // FORCE RESET: Ensure fresh auction data on every server start
+  auctionItems = [
+    { id: 1, title: "Vintage Camera", currentBid: 100, highestBidder: null, auctionEndsAt: Date.now() + 900000, image: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32" },
+    { id: 2, title: "Rare Painting", currentBid: 500, highestBidder: null, auctionEndsAt: Date.now() + 900000, image: "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5" },
+    { id: 3, title: "Antique Vase", currentBid: 250, highestBidder: null, auctionEndsAt: Date.now() + 900000, image: "https://images.unsplash.com/photo-1618220179428-22790b461013" },
+    { id: 4, title: "Classic Car Model", currentBid: 1000, highestBidder: null, auctionEndsAt: Date.now() + 900000, image: "https://images.unsplash.com/photo-1605901309584-818e25960b8f" }
+  ];
+  console.log(`\n🔄 Auction data HARD RESET to default state`);
+  console.log(`🚀 Live Bidding Platform Server Running`);
   console.log(`📡 Server: http://localhost:${PORT}`);
   console.log(`🔒 Race Condition Protection: ENABLED (Mutex Lock)\n`);
 });
