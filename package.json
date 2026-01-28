@@ -1,0 +1,22 @@
+{
+  "name": "live-bidding-platform",
+  "version": "1.0.0",
+  "description": "Live Bidding Platform with race condition handling and real-time updates",
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix client\" \"npm run start --prefix server\"",
+    "install:all": "npm install --prefix client && npm install --prefix server"
+  },
+  "keywords": [
+    "bidding",
+    "real-time",
+    "socketio"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "gsap": "^3.14.2"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
