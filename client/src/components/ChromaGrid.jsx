@@ -7,12 +7,14 @@ const ChromaGrid = ({ auctionItems, placeBid, bidAmounts, handleBidChange, bidde
     const [flashingCards, setFlashingCards] = useState({});
     const previousBids = useRef({});
 
-    // Green Flash Effect when currentBid changes
+    /**
+     * Visual Feedback: Trigger green flash animation when bid amount updates.
+     * Tracks previous bid values to detect real-time changes from Socket.io.
+     */
     useEffect(() => {
         auctionItems.forEach((item) => {
             const prevBid = previousBids.current[item.id];
             if (prevBid !== undefined && prevBid !== item.currentBid) {
-                // Trigger flash
                 setFlashingCards(prev => ({ ...prev, [item.id]: true }));
                 setTimeout(() => {
                     setFlashingCards(prev => ({ ...prev, [item.id]: false }));
@@ -25,13 +27,11 @@ const ChromaGrid = ({ auctionItems, placeBid, bidAmounts, handleBidChange, bidde
     useEffect(() => {
         const cards = cardsRef.current;
 
-        // Mouse move handler for spotlight effect
         const handleMouseMove = (e, card) => {
             const rect = card.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
 
-            // Update spotlight position
             gsap.to(card, {
                 '--mouse-x': `${x}px`,
                 '--mouse-y': `${y}px`,
@@ -56,7 +56,6 @@ const ChromaGrid = ({ auctionItems, placeBid, bidAmounts, handleBidChange, bidde
             });
         };
 
-        // Attach event listeners
         cards.forEach((card) => {
             if (card) {
                 const moveHandler = (e) => handleMouseMove(e, card);
@@ -67,7 +66,6 @@ const ChromaGrid = ({ auctionItems, placeBid, bidAmounts, handleBidChange, bidde
                 card.addEventListener('mouseenter', enterHandler);
                 card.addEventListener('mouseleave', leaveHandler);
 
-                // Store handlers for cleanup
                 card._handlers = { moveHandler, enterHandler, leaveHandler };
             }
         });
@@ -105,12 +103,9 @@ const ChromaGrid = ({ auctionItems, placeBid, bidAmounts, handleBidChange, bidde
                             '--spotlight-opacity': 0
                         }}
                     >
-                        {/* Spotlight Effect Overlay */}
                         <div className="spotlight-overlay" />
 
-                        {/* Card Content */}
                         <div className="relative z-10">
-                            {/* Status Badges */}
                             <div className="absolute top-0 right-0 flex gap-2">
                                 {isWinning && (
                                     <div className="badge-winning px-3 py-1 rounded-full text-xs font-bold">
@@ -124,7 +119,6 @@ const ChromaGrid = ({ auctionItems, placeBid, bidAmounts, handleBidChange, bidde
                                 )}
                             </div>
 
-                            {/* Auction Item Header */}
                             <div className="mb-4">
                                 <h3 className="text-2xl font-bold text-white mb-2">{item.name}</h3>
                                 <div className="flex items-baseline gap-2">
@@ -141,7 +135,6 @@ const ChromaGrid = ({ auctionItems, placeBid, bidAmounts, handleBidChange, bidde
                                 )}
                             </div>
 
-                            {/* Bidding Form */}
                             <div className="space-y-3">
                                 <div>
                                     <label className="block text-sm font-medium mb-2 text-gray-300">
@@ -187,7 +180,6 @@ const ChromaGrid = ({ auctionItems, placeBid, bidAmounts, handleBidChange, bidde
           border-color: rgba(139, 92, 246, 0.3);
         }
 
-        /* Green Flash Animation */
         .flash-green {
           animation: greenFlash 0.6s ease-out;
           border-color: rgba(34, 197, 94, 0.8) !important;
@@ -209,7 +201,6 @@ const ChromaGrid = ({ auctionItems, placeBid, bidAmounts, handleBidChange, bidde
           }
         }
 
-        /* Badge Styles */
         .badge-winning {
           background: linear-gradient(135deg, #fbbf24, #f59e0b);
           color: #000;

@@ -16,8 +16,9 @@ app.use(cors());
 app.use(express.json());
 
 // ============================================
-// AUCTION STATE (In-Memory)
+// AUCTION STATE
 // ============================================
+// In-memory storage for live auction items
 let auctionItems = [
   { id: 1, name: 'Vintage Watch', currentBid: 100, highestBidder: null },
   { id: 2, name: 'Rare Painting', currentBid: 500, highestBidder: null },
@@ -26,13 +27,18 @@ let auctionItems = [
 ];
 
 // ============================================
-// RACE CONDITION HANDLING - MUTEX LOCK
+// RACE CONDITION PROTECTION - MUTEX LOCK
 // ============================================
+/**
+ * Boolean flag implementing a simple mutex lock to prevent race conditions.
+ * Ensures only one bid transaction can be processed at a time across all clients.
+ * This guarantees atomic bid validation and updates even under high concurrency.
+ */
 let isBidLocked = false;
 
 /**
- * placeBid - Handles bid placement with race condition protection
- * Uses a boolean mutex lock to ensure sequential processing
+ * Handles bid placement with mutex-based race condition protection.
+ * Ensures sequential processing of bids to prevent invalid state updates.
  * 
  * @param {number} itemId - The auction item ID
  * @param {number} newBid - The proposed bid amount
@@ -40,41 +46,44 @@ let isBidLocked = false;
  * @returns {Promise<Object>} Result with success/error
  */
 async function placeBid(itemId, newBid, bidderName) {
-  // Wait for lock to be released if another bid is in progress
+  // Spinlock: Wait for lock to be released if another bid is in progress
   while (isBidLocked) {
-    await new Promise(resolve => setTimeout(resolve, 10)); // Wait 10ms and check again
+    await new Promise(resolve => setTimeout(resolve, 10));
   }
 
-  // Acquire lock
+  // Critical Section: Acquire lock to ensure atomic bid processing
   isBidLocked = true;
 
   try {
-    // Find the auction item
     const item = auctionItems.find(i => i.id === itemId);
-    
+
     if (!item) {
       return { success: false, error: 'Item not found' };
     }
 
-    // CRITICAL: Validate newBid > currentBid inside the lock
+    /**
+     * CRITICAL: Validation must occur inside the lock to prevent race conditions.
+     * Without the lock, two simultaneous requests could both pass validation
+     * before either updates the state, resulting in an invalid final bid.
+     */
     if (newBid <= item.currentBid) {
-      return { 
-        success: false, 
-        error: `Bid must be higher than current bid of $${item.currentBid}` 
+      return {
+        success: false,
+        error: `Bid must be higher than current bid of $${item.currentBid}`
       };
     }
 
-    // Update the bid (this is the critical section)
+    // Atomic state update
     item.currentBid = newBid;
     item.highestBidder = bidderName;
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       item: { ...item }
     };
 
   } finally {
-    // Always release the lock
+    // Always release the lock, even on error
     isBidLocked = false;
   }
 }
@@ -83,12 +92,10 @@ async function placeBid(itemId, newBid, bidderName) {
 // HTTP ROUTES
 // ============================================
 
-// Get all auction items
 app.get('/api/auctions', (req, res) => {
   res.json({ items: auctionItems });
 });
 
-// HTTP endpoint to place bid (alternative to Socket.io)
 app.post('/api/bid', async (req, res) => {
   const { itemId, amount, bidderName } = req.body;
 
@@ -99,7 +106,7 @@ app.post('/api/bid', async (req, res) => {
   const result = await placeBid(itemId, amount, bidderName);
 
   if (result.success) {
-    // Broadcast to all connected clients
+    // Broadcast update to all connected Socket.io clients
     io.emit('bidUpdate', result.item);
     return res.json(result);
   } else {
@@ -114,10 +121,9 @@ app.post('/api/bid', async (req, res) => {
 io.on('connection', (socket) => {
   console.log(`✅ New client connected: ${socket.id}`);
 
-  // Send initial auction state
+  // Send initial auction state to newly connected client
   socket.emit('initialState', { items: auctionItems });
 
-  // Handle bid placement via Socket.io
   socket.on('placeBid', async (data) => {
     const { itemId, amount, bidderName } = data;
 
@@ -129,11 +135,11 @@ io.on('connection', (socket) => {
     const result = await placeBid(itemId, amount, bidderName);
 
     if (result.success) {
-      // Broadcast to ALL clients (including sender)
+      // Broadcast to all clients for real-time updates
       io.emit('bidUpdate', result.item);
+      // Confirm success to the bidder
       socket.emit('bidSuccess', result.item);
     } else {
-      // Send error only to the sender
       socket.emit('bidError', { error: result.error, itemId });
     }
   });
