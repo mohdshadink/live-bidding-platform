@@ -96,6 +96,10 @@ app.get('/api/auctions', (req, res) => {
   res.json({ items: auctionItems });
 });
 
+app.get('/items', (req, res) => {
+  res.json({ items: auctionItems });
+});
+
 app.post('/api/bid', async (req, res) => {
   const { itemId, amount, bidderName } = req.body;
 
