@@ -4,10 +4,8 @@ import DotGrid from './components/DotGrid';
 import ChromaGrid from './components/ChromaGrid';
 import './index.css';
 
-// Environment-aware socket connection: localhost for dev, Render for production
-const SOCKET_URL = window.location.hostname === "localhost"
-  ? "http://localhost:3001"
-  : "https://live-bidding-platform-9k8b.onrender.com";
+// Load the URL strictly from the environment variable
+const SOCKET_URL = import.meta.env.VITE_SERVER_URL;
 
 function App() {
   const [auctions, setAuctions] = useState([]);
@@ -41,7 +39,7 @@ function App() {
 
       // Handle connection/reconnection - clear ALL state on connect
       socketRef.current.on('connect', () => {
-        console.log('🔌 Connected to server - clearing old state');
+        console.log('[WEBSOCKET] Connected to server - clearing old state');
         // Force clear all state on every connection
         setAuctions([]);
         setBidAmounts({});
@@ -49,7 +47,7 @@ function App() {
 
       // Listen for initial state
       socketRef.current.on('initialState', (data) => {
-        console.log('📦 Received fresh data from server:', data.items);
+        console.log('[DATA] Received fresh data from server:', data.items);
         setAuctions(data.items);
         // Reset bid amounts to prevent persistence across server restarts
         const initialBids = {};
@@ -57,12 +55,12 @@ function App() {
           initialBids[item.id] = item.currentBid + 10;
         });
         setBidAmounts(initialBids);
-        console.log('✅ State updated with fresh data');
+        console.log('[STATE] State updated with fresh data');
       });
 
       // Listen for bid updates
       socketRef.current.on('bidUpdate', (updatedItem) => {
-        console.log('📢 Bid update received:', updatedItem);
+        console.log('[BID] Bid update received:', updatedItem);
         setAuctions(prev => prev.map(item =>
           item.id === updatedItem.id ? updatedItem : item
         ));
@@ -86,7 +84,7 @@ function App() {
 
       // Handle disconnection
       socketRef.current.on('disconnect', () => {
-        console.log('❌ Disconnected from server');
+        console.log('[WEBSOCKET] Disconnected from server');
       });
     }, 100);
 

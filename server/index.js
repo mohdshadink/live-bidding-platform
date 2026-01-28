@@ -123,7 +123,7 @@ app.post('/api/bid', async (req, res) => {
 // ============================================
 
 io.on('connection', (socket) => {
-  console.log(`✅ New client connected: ${socket.id}`);
+  console.log(`[INFO] New client connected: ${socket.id}`);
 
   // Send initial auction state to newly connected client
   socket.emit('initialState', { items: auctionItems });
@@ -149,7 +149,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log(`❌ Client disconnected: ${socket.id}`);
+    console.log(`[INFO] Client disconnected: ${socket.id}`);
   });
 });
 
@@ -167,8 +167,8 @@ server.listen(PORT, () => {
     { id: 3, title: "Antique Vase", currentBid: 250, highestBidder: null, auctionEndsAt: Date.now() + 900000, image: "https://images.unsplash.com/photo-1618220179428-22790b461013" },
     { id: 4, title: "Classic Car Model", currentBid: 1000, highestBidder: null, auctionEndsAt: Date.now() + 900000, image: "https://images.unsplash.com/photo-1605901309584-818e25960b8f" }
   ];
-  console.log(`\n🔄 Auction data HARD RESET to default state`);
-  console.log(`🚀 Live Bidding Platform Server Running`);
-  console.log(`📡 Server: http://localhost:${PORT}`);
-  console.log(`🔒 Race Condition Protection: ENABLED (Mutex Lock)\n`);
+  console.log(`\n[RESET] Auction data HARD RESET to default state`);
+  console.log(`[INFO] Live Bidding Platform Server Running`);
+  console.log(`[INFO] Server: http://localhost:${PORT}`);
+  console.log(`[INFO] Race Condition Protection: ENABLED (Mutex Lock)\n`);
 });
