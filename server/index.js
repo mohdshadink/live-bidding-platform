@@ -154,7 +154,7 @@ io.on('connection', (socket) => {
 });
 
 // ============================================
-// SERVER STAR
+// SERVER START
 // ============================================
 
 const PORT = process.env.PORT || 3001;
