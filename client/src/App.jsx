@@ -4,7 +4,7 @@ import DotGrid from './components/DotGrid';
 import ChromaGrid from './components/ChromaGrid';
 import './index.css';
 
-const SOCKET_URL = 'http://localhost:3001';
+const SOCKET_URL = 'https://live-bidding-platform-9k8b.onrender.com';
 
 function App() {
   const [auctions, setAuctions] = useState([]);
