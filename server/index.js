@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
+const { getInitialAuctionItems } = require('./data');
 
 const app = express();
 const server = http.createServer(app);
@@ -19,12 +20,7 @@ app.use(express.json());
 // AUCTION STATE - HARD RESET TO DEFAULT
 // ============================================
 // NO FILE SYSTEM PERSISTENCE - ALWAYS STARTS FRESH
-let auctionItems = [
-  { id: 1, title: "Vintage Camera", currentBid: 100, highestBidder: null, auctionEndsAt: Date.now() + 900000, image: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32" },
-  { id: 2, title: "Rare Painting", currentBid: 500, highestBidder: null, auctionEndsAt: Date.now() + 900000, image: "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5" },
-  { id: 3, title: "Antique Vase", currentBid: 250, highestBidder: null, auctionEndsAt: Date.now() + 900000, image: "https://images.unsplash.com/photo-1618220179428-22790b461013" },
-  { id: 4, title: "Classic Car Model", currentBid: 1000, highestBidder: null, auctionEndsAt: Date.now() + 900000, image: "https://images.unsplash.com/photo-1605901309584-818e25960b8f" }
-];
+let auctionItems = getInitialAuctionItems();
 
 // ============================================
 // RACE CONDITION PROTECTION - MUTEX LOCK
@@ -46,6 +42,17 @@ let isBidLocked = false;
  * @returns {Promise<Object>} Result with success/error
  */
 async function placeBid(itemId, newBid, bidderName) {
+  // Pre-check: Prevent consecutive bids from the same user (before mutex lock)
+  const item = auctionItems.find(i => i.id === itemId);
+
+  if (!item) {
+    return { success: false, error: 'Item not found' };
+  }
+
+  if (item.highestBidder && item.highestBidder === bidderName) {
+    return { success: false, error: 'You are already the leading bidder!' };
+  }
+
   // Spinlock: Wait for lock to be released if another bid is in progress
   while (isBidLocked) {
     await new Promise(resolve => setTimeout(resolve, 10));
@@ -55,31 +62,28 @@ async function placeBid(itemId, newBid, bidderName) {
   isBidLocked = true;
 
   try {
-    const item = auctionItems.find(i => i.id === itemId);
-
-    if (!item) {
-      return { success: false, error: 'Item not found' };
-    }
+    // Re-fetch item inside lock for atomic operations
+    const lockedItem = auctionItems.find(i => i.id === itemId);
 
     /**
      * CRITICAL: Validation must occur inside the lock to prevent race conditions.
      * Without the lock, two simultaneous requests could both pass validation
      * before either updates the state, resulting in an invalid final bid.
      */
-    if (newBid <= item.currentBid) {
+    if (newBid <= lockedItem.currentBid) {
       return {
         success: false,
-        error: `Bid must be higher than current bid of $${item.currentBid}`
+        error: `Bid must be higher than current bid of $${lockedItem.currentBid}`
       };
     }
 
     // Atomic state update
-    item.currentBid = newBid;
-    item.highestBidder = bidderName;
+    lockedItem.currentBid = newBid;
+    lockedItem.highestBidder = bidderName;
 
     return {
       success: true,
-      item: { ...item }
+      item: { ...lockedItem }
     };
 
   } finally {
@@ -161,14 +165,10 @@ const PORT = process.env.PORT || 3001;
 
 server.listen(PORT, () => {
   // FORCE RESET: Ensure fresh auction data on every server start
-  auctionItems = [
-    { id: 1, title: "Vintage Camera", currentBid: 100, highestBidder: null, auctionEndsAt: Date.now() + 900000, image: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32" },
-    { id: 2, title: "Rare Painting", currentBid: 500, highestBidder: null, auctionEndsAt: Date.now() + 900000, image: "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5" },
-    { id: 3, title: "Antique Vase", currentBid: 250, highestBidder: null, auctionEndsAt: Date.now() + 900000, image: "https://images.unsplash.com/photo-1618220179428-22790b461013" },
-    { id: 4, title: "Classic Car Model", currentBid: 1000, highestBidder: null, auctionEndsAt: Date.now() + 900000, image: "https://images.unsplash.com/photo-1605901309584-818e25960b8f" }
-  ];
+  auctionItems = getInitialAuctionItems();
   console.log(`\n[RESET] Auction data HARD RESET to default state`);
   console.log(`[INFO] Live Bidding Platform Server Running`);
   console.log(`[INFO] Server: http://localhost:${PORT}`);
-  console.log(`[INFO] Race Condition Protection: ENABLED (Mutex Lock)\n`);
+  console.log(`[INFO] Race Condition Protection: ENABLED (Mutex Lock)`);
+  console.log(`[INFO] Consecutive Bidding Prevention: ENABLED\n`);
 });
